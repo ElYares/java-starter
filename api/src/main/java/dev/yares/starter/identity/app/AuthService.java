@@ -17,7 +17,6 @@ import dev.yares.starter.platform.security.AccessTokens;
 import dev.yares.starter.platform.security.SecurityProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -127,17 +126,20 @@ public class AuthService {
                 .orElseThrow(AuthService::sesionInvalida);
 
         Instant now = clock.instant();
+        User duenio = token.user();
 
-        // CU-002 E2: alguien ya sucedio a este token. El legitimo y el ladron
-        // tienen copias del mismo valor y los dos lo usaron; no hay forma de
-        // saber cual es cual, asi que caen los dos.
-        if (refreshTokens.existsByReplacedBy(token.id())) {
-            UUID duenio = token.user().id();
+        // CU-002 E2: este token ya fue rotado. El legitimo y el ladron tienen
+        // copias del mismo valor y los dos lo usaron; no hay forma de saber cual
+        // es cual, asi que caen los dos.
+        //
+        // Desde la Decision 012 esto es leer la fila que ya se tiene en la mano.
+        // Antes era una consulta contra la base por cada refresh.
+        if (token.replacedBy() != null) {
             // En transaccion aparte: el 401 de abajo revierte esta, y con ella
             // se iria la revocacion. Ver SessionRevoker.
-            int revocados = sessionRevoker.revokeAllOfUser(duenio, now);
+            int revocados = sessionRevoker.revokeAllOfUser(duenio.id(), now);
             log.warn("Reuso de refresh token detectado [usuario={} sesionesRevocadas={}]",
-                    duenio, revocados);
+                    duenio.id(), revocados);
 
             throw sesionInvalida();
         }
@@ -146,27 +148,25 @@ public class AuthService {
             throw sesionInvalida();
         }
 
-        token.revokeAt(now);
-
         String nuevoValor = opaqueTokens.mint();
-        RefreshToken sucesor = RefreshToken.rotatedFrom(token, opaqueTokens.hash(nuevoValor),
+        RefreshToken sucesor = RefreshToken.issue(duenio, opaqueTokens.hash(nuevoValor),
                 now, now.plus(properties.refresh().ttl()), userAgent, ip);
 
-        try {
-            // 'saveAndFlush' y no 'save': el indice unico sobre 'replaced_by'
-            // rechaza una segunda rotacion del mismo token, y sin el flush esa
-            // violacion estallaria al confirmar la transaccion — fuera de este
-            // try, convertida en un 500 en vez de en un 401.
-            refreshTokens.saveAndFlush(sucesor);
-        } catch (DataIntegrityViolationException carrera) {
-            // Otro hilo roto este mismo token primero. El interceptor del
-            // frontend evita llegar aqui compartiendo una sola promesa (CU-002
-            // A1); esto es la red debajo, para cuando no lo haga.
+        // El sucesor se escribe primero y con flush: 'replaced_by' es una clave
+        // foranea contra esta misma tabla, asi que la fila tiene que existir
+        // antes de que nadie pueda apuntarla.
+        refreshTokens.saveAndFlush(sucesor);
+
+        // Y el enlace despues, condicionado a que el token siguiera sin rotar.
+        // Cero filas significa que otro hilo gano la carrera de CU-002 A1; la
+        // promesa compartida del interceptor evita llegar aqui, y esto es la red
+        // debajo, para cuando no lo haga. El 401 revierte tambien el insert de
+        // arriba, asi que el sucesor huerfano no queda.
+        if (refreshTokens.markRotated(token.id(), sucesor.id(), now) == 0) {
             throw sesionInvalida();
         }
 
-        return new IssuedSession(
-                accessTokens.issue(token.user().id(), token.user().roles()), nuevoValor);
+        return new IssuedSession(accessTokens.issue(duenio.id(), duenio.roles()), nuevoValor);
     }
 
     /**
