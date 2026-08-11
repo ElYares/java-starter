@@ -15,15 +15,21 @@ import dev.yares.starter.platform.error.ApiException;
 import dev.yares.starter.platform.error.ErrorCode;
 import dev.yares.starter.platform.security.AccessTokens;
 import dev.yares.starter.platform.security.SecurityProperties;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * El ciclo de vida de una sesion: abrirla (CU-001).
+ * El ciclo de vida de una sesion: abrirla (CU-001), renovarla y cerrarla
+ * (CU-002).
  */
 @Service
 public class AuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     /**
      * Mensaje unico para credenciales invalidas y para cuenta deshabilitada.
@@ -38,6 +44,7 @@ public class AuthService {
     private final RefreshTokenRepository refreshTokens;
     private final PasswordEncoder passwords;
     private final LoginAttemptStore attempts;
+    private final SessionRevoker sessionRevoker;
     private final AccessTokens accessTokens;
     private final OpaqueTokens opaqueTokens;
     private final SecurityProperties properties;
@@ -55,13 +62,15 @@ public class AuthService {
     private final String hashSenuelo;
 
     public AuthService(UserRepository users, RefreshTokenRepository refreshTokens,
-            PasswordEncoder passwords, LoginAttemptStore attempts, AccessTokens accessTokens,
-            OpaqueTokens opaqueTokens, SecurityProperties properties, Clock clock) {
+            PasswordEncoder passwords, LoginAttemptStore attempts, SessionRevoker sessionRevoker,
+            AccessTokens accessTokens, OpaqueTokens opaqueTokens, SecurityProperties properties,
+            Clock clock) {
 
         this.users = users;
         this.refreshTokens = refreshTokens;
         this.passwords = passwords;
         this.attempts = attempts;
+        this.sessionRevoker = sessionRevoker;
         this.accessTokens = accessTokens;
         this.opaqueTokens = opaqueTokens;
         this.properties = properties;
@@ -98,6 +107,97 @@ public class AuthService {
         attempts.clear(porIp);
 
         return openSession(found.get(), userAgent, ip);
+    }
+
+    /**
+     * Rota el refresh token y emite un access token nuevo (CU-002).
+     *
+     * <p>El orden de las comprobaciones no es intercambiable. El reuso se mira
+     * <strong>antes</strong> que la revocacion porque un token rotado tambien
+     * quedo revocado: preguntando al reves, todo robo se leeria como una sesion
+     * cerrada normal y la cadena nunca se revocaria.
+     */
+    @Transactional
+    public IssuedSession refresh(String refreshValue, String userAgent, String ip) {
+        if (refreshValue == null || refreshValue.isBlank()) {
+            throw sesionInvalida();
+        }
+
+        RefreshToken token = refreshTokens.findByTokenHash(opaqueTokens.hash(refreshValue))
+                .orElseThrow(AuthService::sesionInvalida);
+
+        Instant now = clock.instant();
+
+        // CU-002 E2: alguien ya sucedio a este token. El legitimo y el ladron
+        // tienen copias del mismo valor y los dos lo usaron; no hay forma de
+        // saber cual es cual, asi que caen los dos.
+        if (refreshTokens.existsByReplacedBy(token.id())) {
+            UUID duenio = token.user().id();
+            // En transaccion aparte: el 401 de abajo revierte esta, y con ella
+            // se iria la revocacion. Ver SessionRevoker.
+            int revocados = sessionRevoker.revokeAllOfUser(duenio, now);
+            log.warn("Reuso de refresh token detectado [usuario={} sesionesRevocadas={}]",
+                    duenio, revocados);
+
+            throw sesionInvalida();
+        }
+
+        if (token.isRevoked() || token.isExpiredAt(now)) {
+            throw sesionInvalida();
+        }
+
+        token.revokeAt(now);
+
+        String nuevoValor = opaqueTokens.mint();
+        RefreshToken sucesor = RefreshToken.rotatedFrom(token, opaqueTokens.hash(nuevoValor),
+                now, now.plus(properties.refresh().ttl()), userAgent, ip);
+
+        try {
+            // 'saveAndFlush' y no 'save': el indice unico sobre 'replaced_by'
+            // rechaza una segunda rotacion del mismo token, y sin el flush esa
+            // violacion estallaria al confirmar la transaccion — fuera de este
+            // try, convertida en un 500 en vez de en un 401.
+            refreshTokens.saveAndFlush(sucesor);
+        } catch (DataIntegrityViolationException carrera) {
+            // Otro hilo roto este mismo token primero. El interceptor del
+            // frontend evita llegar aqui compartiendo una sola promesa (CU-002
+            // A1); esto es la red debajo, para cuando no lo haga.
+            throw sesionInvalida();
+        }
+
+        return new IssuedSession(
+                accessTokens.issue(token.user().id(), token.user().roles()), nuevoValor);
+    }
+
+    /**
+     * Cierra la sesion actual y solo la actual (CU-002 A2).
+     *
+     * <p>Revocar, no reemplazar: son estados distintos. Si el logout dejara el
+     * token marcado como reemplazado, reintentarlo se leeria como un robo y
+     * tumbaria todas las sesiones del usuario en todos sus dispositivos.
+     *
+     * <p>Es idempotente y nunca falla. Un logout que responde error deja al
+     * usuario mirando una pantalla que dice que sigue dentro cuando ya no lo
+     * esta, y su unica salida es volver a intentarlo.
+     */
+    @Transactional
+    public void logout(String refreshValue) {
+        if (refreshValue == null || refreshValue.isBlank()) {
+            return;
+        }
+
+        refreshTokens.findByTokenHash(opaqueTokens.hash(refreshValue))
+                .ifPresent(token -> token.revokeAt(clock.instant()));
+    }
+
+    /**
+     * Un solo motivo para todos los caminos muertos del refresh.
+     *
+     * <p>Token inexistente, vencido, revocado o robado responden identico: el
+     * cliente no gana nada sabiendo cual, y un atacante si.
+     */
+    private static ApiException sesionInvalida() {
+        return new ApiException(ErrorCode.UNAUTHENTICATED, "Tu sesion no es valida. Inicia sesion.");
     }
 
     private IssuedSession openSession(User user, String userAgent, String ip) {

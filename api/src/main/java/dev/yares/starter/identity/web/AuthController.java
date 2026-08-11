@@ -13,6 +13,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -65,6 +66,54 @@ class AuthController {
         return ResponseEntity.noContent()
                 .header(HttpHeaders.SET_COOKIE, cookies.access(session.accessToken()).toString())
                 .header(HttpHeaders.SET_COOKIE, cookies.refresh(session.refreshToken()).toString())
+                .build();
+    }
+
+    /**
+     * Renueva la sesion sin que el usuario se entere.
+     *
+     * <p>El navegador manda aqui la cookie {@code rt} sola: su {@code Path} es
+     * {@code /api/auth}, asi que no viaja en ninguna otra peticion. Responde
+     * {@code 204} con las dos cookies rotadas, y el interceptor reintenta lo
+     * que habia fallado.
+     */
+    @PostMapping("/refresh")
+    ResponseEntity<Void> refresh(
+            @CookieValue(name = SessionCookies.REFRESH, required = false) String refreshToken,
+            HttpServletRequest http) {
+
+        IssuedSession session = auth.refresh(
+                refreshToken,
+                http.getHeader(HttpHeaders.USER_AGENT),
+                clientIp.of(http));
+
+        return ResponseEntity.noContent()
+                .header(HttpHeaders.SET_COOKIE, cookies.access(session.accessToken()).toString())
+                .header(HttpHeaders.SET_COOKIE, cookies.refresh(session.refreshToken()).toString())
+                .build();
+    }
+
+    /**
+     * Cierra esta sesion.
+     *
+     * <p>Responde {@code 204} y borra las cookies pase lo que pase, incluso sin
+     * cookie que revocar. Un logout que puede fallar deja al usuario sin forma
+     * de salir, y el resultado que el pidio — quedar fuera — se consigue igual
+     * borrando las cookies.
+     *
+     * <p>Las sesiones del mismo usuario en otros dispositivos siguen vivas. El
+     * cierre global existe, pero como consecuencia de detectar un robo, no como
+     * funcion ofrecida.
+     */
+    @PostMapping("/logout")
+    ResponseEntity<Void> logout(
+            @CookieValue(name = SessionCookies.REFRESH, required = false) String refreshToken) {
+
+        auth.logout(refreshToken);
+
+        return ResponseEntity.noContent()
+                .header(HttpHeaders.SET_COOKIE, cookies.clearedAccess().toString())
+                .header(HttpHeaders.SET_COOKIE, cookies.clearedRefresh().toString())
                 .build();
     }
 

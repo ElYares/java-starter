@@ -65,7 +65,10 @@ class AuthCsrfBootstrapIT {
                 .isNotNull()
                 .contains("XSRF-TOKEN=")
                 .doesNotContain("HttpOnly")
-                .contains("Path=/");
+                // 'endsWith' y no 'contains': con 'contains("Path=/")' la
+                // cookie en 'Path=/api' tambien pasaria — y de hecho paso,
+                // escondiendo que la ruta estaba mal puesta.
+                .endsWith("; Path=/");
 
         String token = setCookie.substring(setCookie.indexOf('=') + 1, setCookie.indexOf(';'));
         assertThat(token).isNotBlank();

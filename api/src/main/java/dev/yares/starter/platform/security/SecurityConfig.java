@@ -126,7 +126,10 @@ class SecurityConfig {
      */
     private static CookieCsrfTokenRepository cookieRepository() {
         CookieCsrfTokenRepository repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
-        repository.setCookiePath("/");
+        // Via 'setCookieCustomizer' y no 'setCookiePath': el segundo esta
+        // deprecado y, comprobado, no llega a la cookie emitida — sale con el
+        // context path igual. El sintoma no se parece a la causa.
+        repository.setCookieCustomizer(cookie -> cookie.path("/"));
 
         return repository;
     }
