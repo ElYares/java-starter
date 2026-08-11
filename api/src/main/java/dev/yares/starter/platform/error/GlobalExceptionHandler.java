@@ -2,14 +2,13 @@ package dev.yares.starter.platform.error;
 
 import java.util.List;
 
-import dev.yares.starter.platform.web.TraceIdProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.ResponseEntity.BodyBuilder;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -34,17 +33,21 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
-    private final TraceIdProvider traceIds;
+    private final Problems problems;
 
-    public GlobalExceptionHandler(TraceIdProvider traceIds) {
-        this.traceIds = traceIds;
+    public GlobalExceptionHandler(Problems problems) {
+        this.problems = problems;
     }
 
     /** Errores que el dominio lanza a proposito, con su codigo ya decidido. */
     @ExceptionHandler(ApiException.class)
     ResponseEntity<ProblemDetail> handleApiException(ApiException ex) {
-        return ResponseEntity.status(ex.code().status())
-                .body(problem(ex.code(), ex.getMessage()));
+        BodyBuilder response = ResponseEntity.status(ex.code().status());
+        // Cabeceras que el error mismo exige, como el 'Retry-After' de un 429:
+        // sin ellas el cliente sabe que fue rechazado pero no cuando reintentar.
+        ex.headers().forEach(response::header);
+
+        return response.body(problem(ex.code(), ex.getMessage()));
     }
 
     /**
@@ -99,7 +102,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         problem.setType(code.type());
         problem.setTitle(code.title());
         problem.setProperty("code", code.name());
-        problem.setProperty("traceId", traceIds.currentTraceId());
+        problem.setProperty("traceId", problems.traceId());
 
         if (statusCode.is5xxServerError()) {
             // Un 5xx que llega por esta via tampoco debe describir la
@@ -116,13 +119,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     private ProblemDetail problem(ErrorCode code, String detail) {
-        HttpStatus status = code.status();
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
-        problem.setType(code.type());
-        problem.setTitle(code.title());
-        problem.setProperty("code", code.name());
-        problem.setProperty("traceId", traceIds.currentTraceId());
-
-        return problem;
+        return problems.of(code, detail);
     }
 }

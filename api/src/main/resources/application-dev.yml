@@ -13,3 +13,12 @@ management:
 logging:
   level:
     org.flywaydb: info
+
+app:
+  security:
+    jwt:
+      # Clave fija de desarrollo, no un secreto: esta en el repositorio a
+      # proposito. Es fija y no generada porque devtools reinicia el contexto
+      # con cada recompilacion, y con clave nueva cada reinicio cerraria la
+      # sesion mientras se trabaja. En 'prod' esta clave no existe.
+      secret: desarrollo-java-starter-clave-de-firma-no-secreta
