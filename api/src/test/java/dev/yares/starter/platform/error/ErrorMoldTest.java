@@ -14,6 +14,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
@@ -29,8 +30,13 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>Se prueba asi porque HU-002 va **antes** del primer controlador real: lo
  * que se verifica es la forma de la respuesta, no un endpoint concreto.
  */
-@WebMvcTest
-@Import({ ErrorMoldTest.Fixture.class, TraceIdProvider.class, GlobalExceptionHandler.class })
+@WebMvcTest(controllers = ErrorMoldTest.Fixture.class)
+@Import({ ErrorMoldTest.Fixture.class, TraceIdProvider.class, Problems.class,
+        GlobalExceptionHandler.class })
+// Sin la cadena de filtros: esta rebanada mide la forma del error, no quien
+// tiene permiso de provocarlo. Con Spring Security en el classpath, el
+// comportamiento por omision seria responder 401 a todo y no se probaria nada.
+@AutoConfigureMockMvc(addFilters = false)
 class ErrorMoldTest {
 
     private static final String SECRETO = "contrasena-en-el-mensaje-de-la-excepcion";

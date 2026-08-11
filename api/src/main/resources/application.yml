@@ -33,3 +33,20 @@ management:
       show-details: never
       probes:
         enabled: true
+
+# Modelo de sesion de la Decision 003: JWT corto en cookie HttpOnly y refresh
+# opaco rotado. Las dos vidas son configuracion y no constantes porque son la
+# primera perilla que se toca al diagnosticar un problema de sesion.
+app:
+  security:
+    jwt:
+      # Vacio significa "genera una clave efimera al arrancar". En 'prod' eso
+      # aborta el arranque: ver SecurityInProductionGuard.
+      secret: ${JWT_SECRET:}
+      ttl: 15m
+    refresh:
+      ttl: 14d
+    cookies:
+      # 'Secure' exige HTTPS, y el stack local va por HTTP plano. Obligatorio
+      # en 'prod', donde la guarda lo verifica.
+      secure: ${COOKIE_SECURE:false}
