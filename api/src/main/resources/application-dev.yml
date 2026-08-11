@@ -1,3 +1,9 @@
+spring:
+  flyway:
+    # 'db/seed' solo se agrega aqui. En produccion el seed no esta en el
+    # classpath, asi que no hay condicional que pueda equivocarse.
+    locations: classpath:db/migration,classpath:db/seed
+
 management:
   endpoint:
     health:
