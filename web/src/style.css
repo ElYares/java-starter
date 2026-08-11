@@ -1,0 +1,57 @@
+/* Base minima del paso 2. El sistema de estilos real llega con los layouts de
+   la fase 1; ver docs/05-frontend.md. */
+:root {
+  --text: #6b6375;
+  --text-strong: #08060d;
+  --bg: #ffffff;
+  --code-bg: #f4f3ec;
+  --accent: #42b883;
+
+  font: 16px/1.55 system-ui, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: light dark;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #9ca3af;
+    --text-strong: #f3f4f6;
+    --bg: #16171d;
+    --code-bg: #1f2028;
+  }
+}
+
+body {
+  margin: 0;
+}
+
+h1 {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.875em;
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  color: var(--text-strong);
+  background: var(--code-bg);
+}
+
+button {
+  font: inherit;
+  color: var(--text-strong);
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
