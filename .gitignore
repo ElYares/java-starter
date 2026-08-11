@@ -1,0 +1,21 @@
+# Entorno
+.env
+
+# devherd (los genera la herramienta)
+.devherd.proxy.override.yml
+.devherd.observe.override.yml
+
+# Backend
+api/target/
+api/.m2repo/
+api/.attach_pid*
+
+# Frontend
+web/node_modules/
+web/dist/
+web/.vite/
+
+# Editores
+.idea/
+.vscode/
+*.iml

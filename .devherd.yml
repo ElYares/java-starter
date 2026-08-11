@@ -1,0 +1,11 @@
+# Manifiesto de devherd. Escrito a mano: 'devherd scaffold' no tiene stack Java.
+version: 1
+compose:
+  files:
+    - compose.yaml
+proxy:
+  # 'service' y 'port' solo surten efecto juntos. Si falta uno, devherd cae a
+  # reglas por framework que no cubren este stack.
+  domain: java-starter.localhost
+  service: edge   # nunca 'api': el backend no sirve el frontend
+  port: 80        # puerto interno del contenedor de Caddy, no el publicado

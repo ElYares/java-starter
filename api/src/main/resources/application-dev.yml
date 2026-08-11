@@ -1,0 +1,9 @@
+management:
+  endpoint:
+    health:
+      # En dev queremos ver el detalle de la base en /api/actuator/health.
+      show-details: always
+
+logging:
+  level:
+    org.flywaydb: info
