@@ -69,6 +69,27 @@
       <artifactId>spring-boot-starter-test</artifactId>
       <scope>test</scope>
     </dependency>
+
+    <!--
+      Postgres real en los tests, no H2. H2 no tiene citext ni jsonb ni el mismo
+      comportamiento de tipos, y este esquema se apoya en los dos. Los tests
+      corren las mismas migraciones que produccion. Ver docs/08-calidad.md.
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-testcontainers</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>postgresql</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
@@ -76,6 +97,25 @@
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+
+      <!--
+        Surefire solo recoge *Test / *Tests; las pruebas de integracion se
+        llaman *IT y las corre Failsafe. Sin este plugin, 'mvn test' pasa en
+        verde sin ejecutar una sola de ellas, que es la peor forma de fallar.
+        El comando de CI es 'mvn verify', no 'mvn test'. Ver docs/08-calidad.md.
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>
