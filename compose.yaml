@@ -1,0 +1,110 @@
+# Stack de desarrollo de java-starter.
+#
+# Vive en la raiz del repo a proposito: el detector de devherd solo registra un
+# proyecto si encuentra un compose o un Dockerfile aqui. Con el compose en un
+# subdirectorio, 'devherd up' funciona pero 'park' no lo registra y entonces
+# 'proxy apply', 'open' y 'logs <nombre>' dejan de encontrarlo.
+#
+# Se levanta con devherd, nunca con 'docker compose' directo.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    # Sin 'ports': la base no se expone al host. Tres proyectos peleando por el
+    # 5432 es la colision mas comun. Para un cliente SQL, usa la red de docker.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+  api:
+    image: eclipse-temurin:21-jdk
+    # Corre con el UID del host para que target/ y .m2repo no queden de root.
+    user: "${HOST_UID}:${HOST_GID}"
+    working_dir: /workspace
+    environment:
+      HOME: /tmp
+      SPRING_PROFILES_ACTIVE: dev
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+    # El repositorio Maven vive dentro del bind mount, no en un volumen
+    # nombrado: evita el lio de permisos de un volumen root con usuario no root,
+    # y sobrevive a 'devherd down -v'.
+    command: ["./mvnw", "-B", "-Dmaven.repo.local=/workspace/.m2repo", "spring-boot:run"]
+    volumes:
+      - ./api:/workspace
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      # Solo comprueba que el puerto acepte conexiones. La imagen de Temurin no
+      # trae curl ni wget; /dev/tcp de bash no necesita nada instalado.
+      test: ["CMD-SHELL", "timeout 1 bash -c '</dev/tcp/127.0.0.1/8080' || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+      start_period: 120s
+  web:
+    # Unico servicio con Dockerfile propio; el porque esta en docker/web/Dockerfile.
+    build:
+      context: ./docker/web
+      args:
+        UID: ${HOST_UID}
+        GID: ${HOST_GID}
+    user: "${HOST_UID}:${HOST_GID}"
+    working_dir: /workspace
+    environment:
+      # npm escribe cache y logs en $HOME; el usuario del host no existe en la
+      # imagen y sin esto apunta a / y falla.
+      HOME: /tmp
+    # 'npm install' en cada arranque porque node_modules vive en un volumen que
+    # nace vacio. Con el volumen ya poblado y el lockfile sin cambios, npm no
+    # baja nada y agrega ~1 s.
+    command: ["sh", "-c", "npm install && npm run dev"]
+    volumes:
+      - ./web:/workspace
+      # Tapa el node_modules del bind mount: los binarios nativos que instala el
+      # host (glibc) no corren en la imagen alpine, y al reves igual.
+      - web_node_modules:/workspace/node_modules
+    healthcheck:
+      # busybox trae wget; no hace falta instalar nada.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5173/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+      start_period: 60s
+  edge:
+    # La unica puerta de entrada. No publica puertos: devherd lo cuelga de la
+    # red externa 'infra_web' mediante .devherd.proxy.override.yml, y el Caddy
+    # compartido lo alcanza por alias.
+    image: caddy:2-alpine
+    volumes:
+      - ./docker/edge/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    healthcheck:
+      # Contra la API de administracion de Caddy: mide la salud de 'edge', no la
+      # de lo que hay detras. De eso ya se encargan los healthcheck de cada uno.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:2019/config/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  db_data:
+  web_node_modules:

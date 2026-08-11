@@ -1,0 +1,36 @@
+{
+	# El healthcheck del contenedor golpea la API de administracion cada 10s y
+	# Caddy la registra en nivel info. Sin esta exclusion, 'devherd logs' queda
+	# sepultado bajo el latido de su propio healthcheck.
+	log {
+		exclude admin.api
+	}
+}
+
+# Puerta unica del stack. Existe por una restriccion de devherd: el proxy
+# compartido apunta a un solo servicio y un solo puerto, sin reglas por ruta.
+# El ruteo /api vs / tiene que ocurrir aqui dentro. docs/06-infra-devherd.md
+#
+# El efecto secundario es el que importa: un solo origen. Sin CORS, sin
+# preflights, y cookies HttpOnly con SameSite=Lax en vez de SameSite=None.
+:80 {
+	# Primera de las tres capas de limite de subida. Corta la conexion antes de
+	# gastar un hilo de la JVM. Las otras dos, en docs/03-ingesta.md.
+	request_body {
+		max_size 25MB
+	}
+
+	encode gzip
+
+	# El backend vive bajo /api de punta a punta, asi que no hay reescritura de
+	# ruta: lo que llega es lo que Spring espera.
+	handle /api/* {
+		reverse_proxy api:8080
+	}
+
+	# Todo lo demas al servidor de Vite. Caddy pasa los WebSockets de forma
+	# transparente, asi que el HMR no necesita configuracion de este lado.
+	handle {
+		reverse_proxy web:5173
+	}
+}
