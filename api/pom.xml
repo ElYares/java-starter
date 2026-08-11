@@ -40,6 +40,12 @@
       <artifactId>spring-boot-starter-data-jpa</artifactId>
     </dependency>
 
+    <!-- Bean Validation: sin esto, @Valid es una anotacion decorativa -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+
     <!-- Flyway 10+ exige el modulo del motor por separado -->
     <dependency>
       <groupId>org.flywaydb</groupId>
@@ -54,6 +60,16 @@
       <groupId>org.postgresql</groupId>
       <artifactId>postgresql</artifactId>
       <scope>runtime</scope>
+    </dependency>
+
+    <!--
+      traceId por peticion, propagado y presente en cada linea de log. Es lo
+      que convierte un "no funciona" del usuario en una busqueda de treinta
+      segundos. docs/08-calidad.md.
+    -->
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-tracing-bridge-brave</artifactId>
     </dependency>
 
     <!-- Reinicio automatico al recompilar dentro del contenedor -->
