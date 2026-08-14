@@ -1,7 +1,6 @@
 package dev.yares.starter.identity.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -10,8 +9,14 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,7 +26,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -46,7 +50,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * interceptor no reintente cuando el refresh falla, y que el usuario no vea la
  * pantalla de login. Los tres describen al interceptor de Axios y se prueban en
  * CU-003. Lo que si esta aqui es la garantia que los sostiene desde el
- * servidor: la base impide fisicamente que un token se rote dos veces.
+ * servidor: cinco rotaciones simultaneas del mismo token dejan una sola
+ * sesion viva.
  */
 @Testcontainers
 @SpringBootTest
@@ -100,9 +105,14 @@ class AuthRefreshIT {
 
         UUID sucesor = idDeTokenVivo(rtNuevo);
         assertThat(jdbc.queryForObject(
+                "SELECT replaced_by FROM refresh_tokens WHERE id = ?", UUID.class, anterior))
+                .as("la fila anterior apunta a la nueva")
+                .isEqualTo(sucesor);
+
+        assertThat(jdbc.queryForObject(
                 "SELECT replaced_by FROM refresh_tokens WHERE id = ?", UUID.class, sucesor))
-                .as("la fila nueva apunta a la anterior")
-                .isEqualTo(anterior);
+                .as("la fila nueva todavia no ha sido rotada")
+                .isNull();
     }
 
     @Test
@@ -206,24 +216,63 @@ class AuthRefreshIT {
      * La garantia que sostiene CU-002 A1 desde el servidor.
      *
      * <p>La promesa compartida del interceptor evita que se disparen cinco
-     * refresh a la vez, pero eso es disciplina del cliente. Esto es la base
+     * refresh a la vez, pero eso es disciplina del cliente. Esto es el servidor
      * negandose, que es donde las garantias aguantan.
+     *
+     * <p>Hasta la Decision 012 esto se comprobaba insertando a mano una fila que
+     * violara el indice unico. Ya no sirve: con {@code replaced_by} invertido,
+     * dos rotaciones simultaneas escriben la misma fila y ningun indice las
+     * distingue. Hay que provocar la carrera de verdad.
+     *
+     * <p>Se afirma sobre el invariante y no sobre el camino: cual de los dos
+     * perdedores responde {@code 401} por la carrera y cual por deteccion de
+     * reuso depende de a que velocidad confirme cada transaccion, y afirmar eso
+     * seria un test intermitente. Lo que nunca puede pasar, gane quien gane, es
+     * que una rotacion deje dos refresh tokens validos.
      */
     @Test
-    void laBaseImpideQueUnMismoTokenSeRoteDosVeces() throws Exception {
+    void cincoRefreshSimultaneosConElMismoTokenSoloDejanUnaSesionViva() throws Exception {
         Sesion sesion = iniciarSesion(ADMIN, "10.1.4.1");
-        UUID original = idDeTokenVivo(sesion.rt());
         UUID usuario = idDeUsuario(ADMIN);
 
-        mvc.perform(post("/auth/refresh").with(csrf())
-                .cookie(new Cookie("rt", sesion.rt()))).andReturn();
+        int intentos = 5;
+        ExecutorService pool = Executors.newFixedThreadPool(intentos);
+        CountDownLatch salida = new CountDownLatch(1);
 
-        assertThatThrownBy(() -> jdbc.update("""
-                INSERT INTO refresh_tokens
-                    (id, user_id, token_hash, issued_at, expires_at, replaced_by)
-                VALUES (?, ?, 'otro-hash-cualquiera', now(), now() + interval '14 days', ?)""",
-                UUID.randomUUID(), usuario, original))
-                .isInstanceOf(DataIntegrityViolationException.class);
+        try {
+            List<Future<Integer>> respuestas = new ArrayList<>();
+            for (int i = 0; i < intentos; i++) {
+                respuestas.add(pool.submit(() -> {
+                    // Todos esperan aqui y arrancan juntos: sin esto el primero
+                    // termina antes de que el ultimo empiece y no hay carrera.
+                    salida.await();
+                    return mvc.perform(post("/auth/refresh").with(csrf())
+                            .cookie(new Cookie("rt", sesion.rt())))
+                            .andReturn().getResponse().getStatus();
+                }));
+            }
+
+            salida.countDown();
+
+            List<Integer> codigos = new ArrayList<>();
+            for (Future<Integer> respuesta : respuestas) {
+                codigos.add(respuesta.get(30, TimeUnit.SECONDS));
+            }
+
+            assertThat(codigos)
+                    .as("un solo refresh prospera; los otros cuatro son 401")
+                    .containsOnly(204, 401)
+                    .filteredOn(codigo -> codigo == 204)
+                    .hasSize(1);
+        } finally {
+            pool.shutdownNow();
+        }
+
+        assertThat(jdbc.queryForObject("""
+                SELECT count(*) FROM refresh_tokens
+                 WHERE user_id = ? AND revoked_at IS NULL""", Integer.class, usuario))
+                .as("una rotacion jamas puede dejar dos refresh tokens validos")
+                .isLessThanOrEqualTo(1);
     }
 
     @Test

@@ -48,8 +48,9 @@ GET    /api/auth/me                             → {id, email, displayName, rol
 
 - `login` responde `204` sin cuerpo. El perfil se pide con `me`: un solo lugar
   que define qué sabe el frontend del usuario.
-- `refresh` **rota**: invalida el `rt` recibido y emite uno nuevo con
-  `replaced_by` apuntando al anterior. Si llega un `rt` que ya fue reemplazado,
+- `refresh` **rota**: invalida el `rt` recibido, emite uno nuevo y deja el
+  `replaced_by` del anterior apuntando al nuevo. Si llega un `rt` que ya fue
+  reemplazado,
   se revoca toda la cadena del usuario y se responde `401` — es la firma de un
   token robado.
 - Límite de intentos: 5 fallos por email en 15 minutos → `429` con

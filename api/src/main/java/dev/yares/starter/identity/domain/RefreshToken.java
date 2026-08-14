@@ -48,19 +48,17 @@ public class RefreshToken {
     private Instant revokedAt;
 
     /**
-     * El token al que este <strong>sucede</strong>: apunta hacia atras, al que
-     * se rotó para emitir este. Asi lo fija CU-002 ("la nueva fila tiene
-     * {@code replaced_by} apuntando a la anterior").
+     * El token que <strong>sucede</strong> a este: apunta hacia adelante, al que
+     * se emitio al rotarlo. Nulo mientras no se haya rotado.
      *
-     * <p>El nombre de la columna se lee al reves de lo que guarda, y eso es una
-     * trampa para quien llegue despues: "X replaced_by Y" suena a "a X lo
-     * reemplazo Y", cuando aqui significa "X reemplazo a Y". Se respeta el
-     * nombre porque ya esta en la migracion de HU-001 y en los criterios de
-     * aceptacion; renombrarlo es una migracion, no una decision de esta rama.
+     * <p>Es la propiedad que responde "este token ya fue usado?" con una lectura
+     * de la fila que ya se tiene en la mano. Hasta la Decision 012 apuntaba al
+     * reves y habia que preguntarle a la base quien apunta a mi, con su indice
+     * detras, en la operacion mas frecuente de toda la sesion.
      *
-     * <p>Consecuencia practica: "este token ya fue reemplazado" no se responde
-     * mirando esta columna, sino preguntando si alguien apunta a mi. De ahi el
-     * indice de {@code V2}.
+     * <p>Ojo con el orden al escribirlo: la columna es una clave foranea contra
+     * la misma tabla, asi que la fila sucesora tiene que existir antes de que
+     * esta pueda apuntarla.
      */
     @Column(name = "replaced_by")
     private UUID replacedBy;
@@ -83,29 +81,27 @@ public class RefreshToken {
     }
 
     private RefreshToken(UUID id, User user, String tokenHash, Instant issuedAt,
-            Instant expiresAt, UUID replacedBy, String userAgent, String ip) {
+            Instant expiresAt, String userAgent, String ip) {
         this.id = id;
         this.user = user;
         this.tokenHash = tokenHash;
         this.issuedAt = issuedAt;
         this.expiresAt = expiresAt;
-        this.replacedBy = replacedBy;
         this.userAgent = userAgent;
         this.ip = ip;
     }
 
-    /** Primer token de una sesion: no sucede a ninguno. */
+    /**
+     * Un token recien emitido, ya sea al abrir sesion o al rotar otro.
+     *
+     * <p>No hay una fabrica aparte para la rotacion porque el sucesor no se
+     * distingue en nada de un token nuevo: el vinculo entre los dos vive en el
+     * predecesor, no aqui.
+     */
     public static RefreshToken issue(User user, String tokenHash, Instant issuedAt,
             Instant expiresAt, String userAgent, String ip) {
         return new RefreshToken(UUID.randomUUID(), user, tokenHash, issuedAt, expiresAt,
-                null, userAgent, ip);
-    }
-
-    /** Token emitido por rotacion, que apunta al que vino antes. */
-    public static RefreshToken rotatedFrom(RefreshToken previous, String tokenHash,
-            Instant issuedAt, Instant expiresAt, String userAgent, String ip) {
-        return new RefreshToken(UUID.randomUUID(), previous.user, tokenHash, issuedAt,
-                expiresAt, previous.id, userAgent, ip);
+                userAgent, ip);
     }
 
     public void revokeAt(Instant moment) {

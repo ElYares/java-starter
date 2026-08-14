@@ -40,7 +40,7 @@ refresh_tokens (
   issued_at    timestamptz not null,
   expires_at   timestamptz not null,
   revoked_at   timestamptz,
-  replaced_by  uuid references refresh_tokens(id),
+  replaced_by  uuid references refresh_tokens(id),  -- el sucesor, no el anterior
   user_agent   text,
   ip           inet
 )
@@ -54,9 +54,15 @@ Notas que importan:
   requiere migración con `ALTER TYPE`; una fila no.
 - **El refresh token se guarda hasheado.** Una fuga de la base no debe entregar
   sesiones activas.
-- **`replaced_by` implementa rotación con detección de reuso.** Si llega un
+- **`replaced_by` implementa rotación con detección de reuso.** Guarda el token
+  que **sucede** a la fila, así que está nulo mientras no se haya rotado y la
+  pregunta "¿este token ya se usó?" es una lectura de columna. Si llega un
   refresh token que ya fue reemplazado, es señal de robo: se revoca la cadena
-  completa de ese usuario.
+  completa de ese usuario. El sentido lo fija la Decisión 012; antes apuntaba al
+  revés y costaba una consulta por refresh.
+- **La rotación doble la impide un `UPDATE` condicional, no un índice.** Con
+  `replaced_by` apuntando hacia adelante, dos rotaciones simultáneas escriben la
+  misma fila y un `UNIQUE` no las distingue.
 
 ## Módulo `ingestion`
 
