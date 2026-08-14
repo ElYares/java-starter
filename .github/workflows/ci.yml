@@ -45,7 +45,7 @@ jobs:
         run: ./mvnw -B verify
 
   frontend:
-    name: frontend (tipos y build)
+    name: frontend (tipos, build y tests)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -68,8 +68,12 @@ jobs:
         run: npm ci
 
       # 'build' ya encadena `vue-tsc -b`, asi que verifica tipos y compilacion
-      # en un paso. Lint y tests de frontend entran con CU-003, cuando existan
-      # los scripts: referenciar scripts inexistentes deja un CI que falla
-      # siempre y termina ignorado.
+      # en un paso. Va primero para que un error de tipos salga antes que un
+      # fallo de asercion, que es mas barato de leer.
       - name: tipos y build
         run: npm run build
+
+      # 'test:run' y no 'test': `vitest` a secas se queda en modo watch y el job
+      # colgaria hasta el timeout del runner.
+      - name: tests
+        run: npm run test:run

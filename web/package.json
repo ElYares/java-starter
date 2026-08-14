@@ -5,19 +5,29 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "test": "vitest",
+    "test:run": "vitest run",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "vue-tsc -b --noEmit"
   },
   "dependencies": {
-    "vue": "^3.5.40"
+    "axios": "^1.19.0",
+    "pinia": "^4.0.3",
+    "vue": "^3.5.40",
+    "vue-router": "^5.2.0"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/user-event": "^14.6.4",
+    "@testing-library/vue": "^8.1.0",
     "@types/node": "^24.13.3",
     "@vitejs/plugin-vue": "^6.0.8",
     "@vue/tsconfig": "^0.9.1",
+    "jsdom": "^30.0.1",
     "typescript": "~6.0.2",
     "vite": "^8.2.0",
+    "vitest": "^4.1.10",
     "vue-tsc": "^3.3.8"
   }
 }
