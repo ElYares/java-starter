@@ -45,7 +45,7 @@ h1 {
 
 .lead {
   margin: 0 0 1.5rem;
-  color: var(--accent);
+  color: var(--accent-strong);
   font-weight: 600;
 }
 
