@@ -1,0 +1,27 @@
+# Existe por el trabajo manual de subir `ci.yml` a mano.
+#
+# El aviso de deprecacion que llevo a esa subida decia "Node 20 esta deprecado"
+# y no decia que las acciones ya estuvieran tres majors adelante. Nadie revisa
+# los avisos de un run que paso en verde, asi que el atraso se descubre cuando
+# algo se rompe. Esto lo convierte en un PR que llega solo.
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    # La raiz, no `.github/workflows`: para este ecosistema Dependabot interpreta
+    # el directorio como la raiz del repo y busca los workflows por su cuenta.
+    directory: /
+    schedule:
+      interval: weekly
+
+    # Todas las acciones en un solo PR. Sin agrupar son tres PRs para el mismo
+    # trabajo de un minuto, y tres corridas de CI: el ruido es justo lo que hace
+    # que estos PRs se ignoren, que es como se llega otra vez al atraso.
+    groups:
+      acciones:
+        patterns: ['*']
+
+    # Para que el commit encaje con el historial del repo, que usa Conventional
+    # Commits y ya tiene 'ci' entre sus tipos.
+    commit-message:
+      prefix: ci
