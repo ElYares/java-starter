@@ -1,6 +1,7 @@
 import axios from 'axios'
 
 import { ApiError } from './ApiError'
+import { instalarRefresh } from './refresh'
 
 // Cuanto se espera antes de dar el servidor por perdido.
 //
@@ -36,15 +37,22 @@ export const api = axios.create({
   timeout: ESPERA_MAXIMA_MS,
 })
 
-// Primera responsabilidad del interceptor de respuesta: normalizar.
+// El orden de estos dos es contrato, no estilo.
 //
+// Los interceptores de respuesta de Axios corren en el orden en que se
+// registran, asi que el refresh ve el error de Axios crudo —con el `config` que
+// necesita para reintentar— y la normalizacion ocurre despues, ya sobre lo que
+// de verdad va a salir. Invertirlos deja al refresh con un `ApiError` que no
+// lleva config, y meterselo obligaria a que el tipo que ven las vistas cargue
+// detalle de transporte.
+//
+// El otro efecto de este orden: un reintento que funciona nunca produce un
+// error, asi que el normalizador ni se entera.
+instalarRefresh(api)
+
 // Aqui el error deja de ser "lo que sea que Axios haya rechazado" y pasa a ser
 // siempre un `ApiError`. Es lo que permite que una vista escriba
 // `catch (e) { if (e.unavailable) ... }` sin comprobar antes de que tipo es.
-//
-// Las otras dos —el refresh ante un 401 y el reintento— se montan sobre este en
-// la fase 3. El orden importa: van despues, para que el reintento decida sobre
-// un error ya normalizado.
 api.interceptors.response.use(
   (respuesta) => respuesta,
   (error: unknown) => Promise.reject(ApiError.from(error)),
