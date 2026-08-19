@@ -66,6 +66,7 @@ class AuthController {
         return ResponseEntity.noContent()
                 .header(HttpHeaders.SET_COOKIE, cookies.access(session.accessToken()).toString())
                 .header(HttpHeaders.SET_COOKIE, cookies.refresh(session.refreshToken()).toString())
+                .header(HttpHeaders.SET_COOKIE, cookies.hint().toString())
                 .build();
     }
 
@@ -74,8 +75,8 @@ class AuthController {
      *
      * <p>El navegador manda aqui la cookie {@code rt} sola: su {@code Path} es
      * {@code /api/auth}, asi que no viaja en ninguna otra peticion. Responde
-     * {@code 204} con las dos cookies rotadas, y el interceptor reintenta lo
-     * que habia fallado.
+     * {@code 204} con las dos cookies rotadas y la pista reemitida, y el
+     * interceptor reintenta lo que habia fallado.
      */
     @PostMapping("/refresh")
     ResponseEntity<Void> refresh(
@@ -90,6 +91,10 @@ class AuthController {
         return ResponseEntity.noContent()
                 .header(HttpHeaders.SET_COOKIE, cookies.access(session.accessToken()).toString())
                 .header(HttpHeaders.SET_COOKIE, cookies.refresh(session.refreshToken()).toString())
+                // Se reemite en cada rotacion, no solo en el login: su Max-Age
+                // tiene que deslizarse con el del 'rt' o expira antes que la
+                // sesion que anuncia.
+                .header(HttpHeaders.SET_COOKIE, cookies.hint().toString())
                 .build();
     }
 
@@ -114,6 +119,7 @@ class AuthController {
         return ResponseEntity.noContent()
                 .header(HttpHeaders.SET_COOKIE, cookies.clearedAccess().toString())
                 .header(HttpHeaders.SET_COOKIE, cookies.clearedRefresh().toString())
+                .header(HttpHeaders.SET_COOKIE, cookies.clearedHint().toString())
                 .build();
     }
 
