@@ -45,25 +45,41 @@ export const api = axios.create({
 })
 ```
 
-Un interceptor de respuesta con tres responsabilidades:
+**Dos** interceptores de respuesta, y el orden entre ellos es contrato:
 
-1. **Normalizar el error.** Todo error se convierte en un `ApiError` con `code`,
-   `status`, `message`, `fieldErrors` y `traceId`, leyendo el `problem+json` del
-   backend. Las vistas nunca inspeccionan `error.response.data.detail`.
-2. **Refresh en 401, una sola vez.** Al recibir `401`, se llama a
-   `POST /api/auth/refresh`. Si funciona, se reintenta la petición original; si
-   falla, se limpia el store y se redirige a login. **Con una promesa compartida**:
-   si cinco peticiones fallan a la vez, se hace un solo refresh y las cinco
-   esperan a esa promesa. Sin eso, cinco refresh concurrentes rotan el token
-   cinco veces y cuatro se invalidan mutuamente.
-   El `refresh` mismo queda excluido del interceptor, o el bucle es infinito.
-3. **Adjuntar el `traceId` al error visible.** Cuando el usuario reporte algo,
-   ese código es lo que lo conecta con el log del servidor.
+1. **Refresh en 401, una sola vez** (`shared/api/refresh.ts`). Al recibir `401`
+   se llama a `POST /api/auth/refresh` y se reintenta la petición original.
+   **Con una promesa compartida**: si cinco peticiones fallan a la vez se hace un
+   solo refresh y las cinco esperan a esa promesa. Sin eso, cinco refresh
+   concurrentes rotan el token cinco veces y cuatro se invalidan mutuamente.
+   `/auth/refresh` queda excluido, o el bucle es infinito; `/auth/login` también,
+   porque ahí un `401` son credenciales malas. Y solo se intenta si está la cookie
+   `has_session` — ver Decisión 014 y `docs/04-contratos-api.md`.
+2. **Normalizar el error** (`shared/api/client.ts`). Todo error se convierte en un
+   `ApiError` con `code`, `status`, `message`, `fieldErrors` y `traceId`, leyendo
+   el `problem+json` del backend. Las vistas nunca inspeccionan
+   `error.response.data.detail`. El `traceId` viaja ahí: cuando el usuario reporte
+   algo, ese código es lo que lo conecta con el log del servidor.
 
-**El cliente tipado se genera** desde `/api/openapi.json` hacia
-`shared/api/generated/`. Es artefacto de build, no se edita ni se revisa a mano.
-El día que el backend renombre un campo, el error aparece al compilar, no en
-producción.
+**Va primero el refresh y no la normalización.** Reintentar exige el `config` de
+la petición original, y eso solo lo trae el error de Axios: un `ApiError` no lo
+lleva ni debe llevarlo, porque es el tipo que ven las vistas y un config de
+transporte no tiene nada que hacer ahí. De paso, un reintento que funciona no
+produce ningún error, así que el normalizador ni se entera.
+
+El interceptor **no importa el store ni el router** — `shared/` no puede depender
+de `app/`. Expone `onSessionLost(cb)` y el router lo conecta.
+
+`ApiError` distingue **"el servidor dijo que no" de "no hubo servidor"**
+(`answered`) y de "el backend está caído" (`unavailable`, que incluye `502`/`503`/
+`504`). Confundir no disponible con no autenticado hace que una caída de treinta
+segundos expulse a todos los usuarios de su sesión.
+
+**El cliente tipado desde OpenAPI no existe todavía**: falta `springdoc` en el
+`pom` (HU-004). Hasta entonces `shared/api` se escribe a mano. Cuando exista, se
+genera hacia `shared/api/generated/` como artefacto de build, sin editar ni
+revisar a mano: el día que el backend renombre un campo, el error aparece al
+compilar y no en producción.
 
 ## Layouts
 

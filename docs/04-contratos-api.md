@@ -9,13 +9,14 @@ de bugs "el backend renombró un campo y el frontend se enteró en producción".
 
 ## Autenticación
 
-Dos cookies, ambas `HttpOnly`, `Secure` en producción, `SameSite=Lax`, y `Path`
-acotado:
+Dos cookies de sesión, ambas `HttpOnly`, `Secure` en producción, `SameSite=Lax`,
+y `Path` acotado — más una pista que no es una credencial:
 
-| Cookie | Contenido | Vida | Path |
-|---|---|---|---|
-| `at` | JWT de acceso firmado (HS256), claims `sub`, `roles`, `exp` | 15 min | `/api` |
-| `rt` | Refresh opaco (aleatorio de 256 bits) | 14 días | `/api/auth` |
+| Cookie | Contenido | Vida | Path | `HttpOnly` |
+|---|---|---|---|---|
+| `at` | JWT de acceso firmado (HS256), claims `sub`, `roles`, `exp` | 15 min | `/api` | sí |
+| `rt` | Refresh opaco (aleatorio de 256 bits) | 14 días | `/api/auth` | sí |
+| `has_session` | Literalmente `1`. No lleva información | 14 días | `/` | **no** |
 
 Como todo vive bajo el mismo origen gracias al proxy, el navegador manda las
 cookies solo. **El frontend no toca tokens, no los guarda y no los adjunta.**
@@ -25,6 +26,32 @@ robando el token. Ver Decisión 003.
 El refresh es **opaco y consultable en base**, no un JWT: eso es lo que permite
 revocarlo. Un refresh JWT no se puede invalidar sin una lista negra, que es una
 tabla — la misma tabla, pero con más pasos.
+
+### La pista de sesión
+
+`has_session` es la única cookie que JavaScript puede leer, y existe por un
+efecto secundario de que las otras dos no lo sean: **la SPA no tiene forma de
+saber si alguna vez hubo sesión.** Sin saberlo, su interceptor responde al `401`
+de `/auth/me` con un refresh que también falla, y cada visita anónima cuesta dos
+peticiones perdidas y deja un `401` en el log que se parece a un ataque.
+
+Con la pista, el visitante anónimo no pide nada.
+
+**No es una credencial y el servidor jamás la mira.** Ponerla a mano no consigue
+nada: quien lo haga solo logra que su propio navegador intente un refresh que va
+a ser rechazado. Toda la autorización sigue viviendo en el `at` firmado.
+
+Dos detalles que no son cosméticos:
+
+- **Su `Max-Age` es el del `rt`, y se reemite en cada rotación.** Una pista que
+  sobreviva al refresh token devuelve el refresh perdido que vino a evitar; una
+  que caduque antes expulsa a un usuario con sesión válida.
+- **La borra el logout, y también el frontend cuando un refresh es rechazado.**
+  Ese segundo camino es del cliente a propósito: ahí ya sabe que la sesión murió,
+  y resolverlo en el servidor obligaría a colgar cabeceras `Set-Cookie` de la
+  excepción del refresh para algo que en el cliente es una línea.
+
+Ver Decisión 014.
 
 ### CSRF
 

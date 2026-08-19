@@ -1,60 +1,42 @@
 <script setup lang="ts">
-// Pagina unica del paso 2 de la fase 0. Sin router, sin store y sin capa de
-// API todavia: lo que se verifica aqui es que el contenedor sirva la SPA y que
-// el HMR reaccione a los cambios del bind mount. La estructura real (app/,
-// shared/, features/) llega con la fase 1; ver docs/05-frontend.md.
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
-const contador = ref(0)
+import AppLayout from './app/layouts/AppLayout.vue'
+import AuthLayout from './app/layouts/AuthLayout.vue'
+import { useAuthStore } from './app/stores/auth'
+import StatusPanel from './shared/ui/StatusPanel.vue'
+
+const route = useRoute()
+const router = useRouter()
+const sesion = useAuthStore()
+
+// El layout sale de la ruta y no de la vista. Ver `meta.layout`.
+const layout = computed(() => (route.meta.layout === 'app' ? AppLayout : AuthLayout))
+
+// La primera navegacion del router es asincrona, asi que entre el `mount` y su
+// resolucion el `RouterView` no tiene nada que pintar. Sin esta bandera eso se
+// ve: un marco vacio parpadea antes de que el guard termine de preguntar `/me`.
+const listo = ref(false)
+void router.isReady().then(() => {
+  listo.value = true
+})
+
+// La espera cubre los dos momentos: el arranque en frio, y un reintento desde la
+// vista de disponibilidad.
+const esperando = computed(() => !listo.value || sesion.estado === 'loading')
 </script>
 
 <template>
-  <main>
-    <h1>java-starter</h1>
-    <p class="lead">El contenedor <code>web</code> esta sirviendo la SPA.</p>
+  <!-- Sin acciones a proposito: no hay nada que el usuario pueda hacer mientras
+       se resuelve `/me`, y un boton muerto seria peor que ninguno. -->
+  <StatusPanel
+    v-if="esperando"
+    title="Verificando tu sesion"
+    description="Un momento: estamos comprobando si ya habias iniciado sesion."
+  />
 
-    <p>
-      Fase 0 completa: entras por <code>java-starter.localhost</code>, el
-      servicio <code>edge</code> rutea <code>/api</code> al backend y el resto
-      aqui, y no hay un solo puerto publicado en el host.
-    </p>
-
-    <button type="button" @click="contador++">
-      Estado local: {{ contador }}
-    </button>
-
-    <p class="hint">
-      Prueba del HMR: sube el contador, edita este texto en
-      <code>web/src/App.vue</code> y guarda. Debe cambiar sin recargar y sin que
-      el contador vuelva a cero.
-    </p>
-  </main>
+  <component :is="layout" v-else>
+    <RouterView />
+  </component>
 </template>
-
-<style scoped>
-main {
-  max-width: 36rem;
-  margin: 0 auto;
-  padding: 4rem 1.5rem;
-}
-
-h1 {
-  margin: 0 0 0.25rem;
-  font-size: 2rem;
-}
-
-.lead {
-  margin: 0 0 1.5rem;
-  color: var(--accent);
-  font-weight: 600;
-}
-
-button {
-  margin: 1.5rem 0;
-}
-
-.hint {
-  font-size: 0.875rem;
-  opacity: 0.75;
-}
-</style>

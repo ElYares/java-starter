@@ -184,7 +184,9 @@ class AuthRefreshIT {
         assertThat(salida.getResponse().getStatus()).isEqualTo(204);
 
         List<String> borradas = salida.getResponse().getHeaders(HttpHeaders.SET_COOKIE);
-        assertThat(borradas).hasSize(2);
+        assertThat(borradas)
+                .as("las dos de sesion y la pista de la Decision 014")
+                .hasSize(3);
         assertThat(borradas).allSatisfy(cookie -> assertThat(cookie).contains("Max-Age=0"));
 
         assertThat(mvc.perform(post("/auth/refresh").with(csrf())
@@ -281,6 +283,47 @@ class AuthRefreshIT {
 
         assertThat(result.getResponse().getStatus()).isEqualTo(401);
         assertThat(result.getResponse().getContentAsString()).contains("UNAUTHENTICATED");
+    }
+
+    /**
+     * La pista se reemite en cada rotacion, no solo en el login.
+     *
+     * <p>Sin esto la pista caduca a los catorce dias del login mientras la
+     * sesion sigue viva rotando, y el usuario activo se queda sin pista con
+     * sesion valida: el interceptor deja de intentar el refresh y lo expulsa la
+     * primera vez que se le vence el access token.
+     */
+    @Test
+    void cadaRotacionReemiteLaPistaParaQueNoCaduqueAntesQueLaSesion() throws Exception {
+        Sesion sesion = iniciarSesion(ADMIN, "10.1.9.1");
+
+        MvcResult refresco = mvc.perform(post("/auth/refresh")
+                        .with(csrf())
+                        .cookie(new Cookie("rt", sesion.rt())))
+                .andReturn();
+
+        assertThat(refresco.getResponse().getStatus()).isEqualTo(204);
+        assertThat(valorDeCookie(refresco, "has_session")).isEqualTo("1");
+    }
+
+    /**
+     * Un refresh que falla no borra la pista, y es a proposito.
+     *
+     * <p>Lo hace el frontend, que en ese punto ya sabe que la sesion murio y
+     * puede leer y borrar la pista por su cuenta. Hacerlo aqui exigiria colgar
+     * cabeceras de la excepcion para un caso que el cliente resuelve en una
+     * linea. Este test fija ese reparto: si algun dia el backend empieza a
+     * borrarla, es un cambio de contrato y hay que enterarse aqui.
+     */
+    @Test
+    void unRefreshRechazadoNoTocaLaPistaPorqueEsoLoHaceElCliente() throws Exception {
+        MvcResult result = mvc.perform(post("/auth/refresh")
+                        .with(csrf())
+                        .cookie(new Cookie("rt", "un-token-que-no-existe")))
+                .andReturn();
+
+        assertThat(result.getResponse().getStatus()).isEqualTo(401);
+        assertThat(result.getResponse().getHeaders(HttpHeaders.SET_COOKIE)).isEmpty();
     }
 
     // ── utilidades ──────────────────────────────────────────────────────────

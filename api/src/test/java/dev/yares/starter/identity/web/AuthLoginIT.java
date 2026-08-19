@@ -74,13 +74,45 @@ class AuthLoginIT {
         assertThat(result.getResponse().getContentAsString()).isEmpty();
 
         List<String> cookies = result.getResponse().getHeaders(HttpHeaders.SET_COOKIE);
-        assertThat(cookies).hasSize(2);
+        assertThat(cookies).hasSize(3);
 
         String at = cookieNamed(cookies, "at");
         String rt = cookieNamed(cookies, "rt");
 
         assertThat(at).contains("HttpOnly").contains("SameSite=Lax").contains("Path=/api;");
         assertThat(rt).contains("HttpOnly").contains("SameSite=Lax").contains("Path=/api/auth");
+    }
+
+    /**
+     * La pista de la Decision 014.
+     *
+     * <p>Las tres cosas que se afirman son las tres que la hacen servir: que JS
+     * la vea, que no diga nada, y que muera con el refresh token. Si dejara de
+     * ser legible el interceptor no podria consultarla y volveria el refresh
+     * fantasma; si llevara algo mas que "1" seria una credencial en claro; y si
+     * su Max-Age no fuera el del 'rt', sobreviviria a la sesion y devolveria el
+     * refresh perdido que vino a evitar.
+     */
+    @Test
+    void laPistaDeSesionEsLegiblePorJsNoDiceNadaYMuereConElRefreshToken() throws Exception {
+        MvcResult result = mvc.perform(login(ADMIN, PASSWORD, "10.0.0.9")).andReturn();
+
+        List<String> cookies = result.getResponse().getHeaders(HttpHeaders.SET_COOKIE);
+        String pista = cookieNamed(cookies, "has_session");
+
+        assertThat(pista)
+                .as("el interceptor la lee con document.cookie: HttpOnly la esconderia")
+                .doesNotContain("HttpOnly");
+        assertThat(pista)
+                .as("Path=/ o la SPA no la ve desde una ruta anidada")
+                .contains("Path=/;")
+                .contains("SameSite=Lax");
+        assertThat(valueOf(pista))
+                .as("no lleva informacion: el servidor jamas la mira")
+                .isEqualTo("1");
+        assertThat(maxAgeOf(pista))
+                .as("una pista que sobreviva al rt devuelve el refresh fantasma")
+                .isEqualTo(maxAgeOf(cookieNamed(cookies, "rt")));
     }
 
     @Test
@@ -274,6 +306,13 @@ class AuthLoginIT {
                 .filter(header -> header.startsWith(name + "="))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("no vino la cookie " + name));
+    }
+
+    private static long maxAgeOf(String setCookieHeader) {
+        String tras = setCookieHeader.substring(setCookieHeader.indexOf("Max-Age=") + 8);
+        int fin = tras.indexOf(';');
+
+        return Long.parseLong(fin < 0 ? tras : tras.substring(0, fin));
     }
 
     private static String valueOf(String setCookieHeader) {

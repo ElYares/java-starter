@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 
 const DOMAIN = 'java-starter.localhost'
@@ -26,5 +26,14 @@ export default defineConfig({
       clientPort: 80,
       host: DOMAIN,
     },
+  },
+  test: {
+    // Los componentes necesitan un DOM. jsdom lo da sin navegador, que es la
+    // condicion que fijamos para poder correr esto en CI.
+    environment: 'jsdom',
+    setupFiles: ['src/test/setup.ts'],
+    // Las pruebas viven junto a lo que prueban: un modulo se lleva las suyas
+    // cuando se mueve de lugar.
+    include: ['src/**/*.spec.ts'],
   },
 })
