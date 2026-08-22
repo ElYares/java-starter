@@ -37,29 +37,36 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record ApiError(
 
         @Schema(description = "URI del tipo de error, relativa",
-                example = "/errors/validation-failed")
+                example = "/errors/validation-failed",
+                requiredMode = Schema.RequiredMode.REQUIRED)
         URI type,
 
-        @Schema(description = "Titulo estable para humanos", example = "La peticion no es valida")
+        @Schema(description = "Titulo estable para humanos", example = "La peticion no es valida",
+                requiredMode = Schema.RequiredMode.REQUIRED)
         String title,
 
-        @Schema(description = "Codigo de estado HTTP", example = "400")
+        @Schema(description = "Codigo de estado HTTP", example = "400",
+                requiredMode = Schema.RequiredMode.REQUIRED)
         int status,
 
         @Schema(description = "Que paso en este caso concreto. Puede cambiar sin aviso: "
                 + "el cliente decide con 'code', nunca con este texto",
-                example = "Revisa los campos marcados")
+                example = "Revisa los campos marcados",
+                requiredMode = Schema.RequiredMode.REQUIRED)
         String detail,
 
-        @Schema(description = "Ruta que produjo el error", example = "/api/auth/login")
+        @Schema(description = "Ruta que produjo el error", example = "/api/auth/login",
+                requiredMode = Schema.RequiredMode.REQUIRED)
         URI instance,
 
-        @Schema(description = "El discriminador. Catalogo cerrado", example = "VALIDATION_FAILED")
+        @Schema(description = "El discriminador. Catalogo cerrado", example = "VALIDATION_FAILED",
+                requiredMode = Schema.RequiredMode.REQUIRED)
         ErrorCode code,
 
         @Schema(description = "Identificador de traza de la peticion. Es lo que convierte un "
                 + "'no funciona' en una busqueda en los logs",
-                example = "6a8941ac6d3a53508346a4bfe8f1d799")
+                example = "6a8941ac6d3a53508346a4bfe8f1d799",
+                requiredMode = Schema.RequiredMode.REQUIRED)
         String traceId,
 
         @Schema(description = "Detalle campo por campo. Solo presente cuando code es "

@@ -4,6 +4,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import dev.yares.starter.identity.domain.User;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * Lo unico que el frontend sabe del usuario.
@@ -16,7 +17,17 @@ import dev.yares.starter.identity.domain.User;
  * <p>No lleva {@code passwordHash} ni {@code enabled}: el primero no sale nunca
  * de la base, y el segundo no le sirve a quien ya inicio sesion.
  */
-public record MeResponse(UUID id, String email, String displayName, Set<String> roles) {
+public record MeResponse(
+
+        // Los cuatro van marcados como obligatorios porque los cuatro viajan
+        // siempre: 'of' los copia de un User que existe. Sin esta marca springdoc
+        // los declara opcionales, y entonces el cliente generado tipa cada uno
+        // como 'string | undefined' — un tipo mas debil que la realidad, que
+        // obliga a comprobar en cada uso algo que no puede pasar.
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) UUID id,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String email,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String displayName,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Set<String> roles) {
 
     static MeResponse of(User user) {
         return new MeResponse(user.id(), user.email(), user.displayName(), user.roles());
