@@ -9,7 +9,8 @@
     "test:run": "vitest run",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "vue-tsc -b --noEmit"
+    "typecheck": "vue-tsc -b --noEmit",
+    "api:types": "openapi-ts"
   },
   "dependencies": {
     "axios": "^1.19.0",
@@ -18,6 +19,7 @@
     "vue-router": "^5.2.0"
   },
   "devDependencies": {
+    "@hey-api/openapi-ts": "^0.99.0",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/user-event": "^14.6.4",
     "@testing-library/vue": "^8.1.0",

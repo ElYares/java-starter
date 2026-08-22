@@ -32,9 +32,16 @@ function transporte(responder: (config: InternalAxiosRequestConfig) => unknown):
 }
 
 describe('api', () => {
-  it('apunta al mismo origen y deja viajar las cookies', () => {
+  // Las cuatro juntas y no dos, porque son las cuatro que HU-004 fija como
+  // contrato del cliente. El `baseURL` es la otra mitad del contrato OpenAPI:
+  // el documento declara `servers: ['/api']` y las rutas sin ese prefijo, asi
+  // que si esta instancia dejara de anteponerlo, cada llamada del cliente
+  // generado pediria una ruta que no existe.
+  it('apunta al mismo origen, deja viajar las cookies y nombra el CSRF como Spring', () => {
     expect(api.defaults.baseURL).toBe('/api')
     expect(api.defaults.withCredentials).toBe(true)
+    expect(api.defaults.xsrfCookieName).toBe('XSRF-TOKEN')
+    expect(api.defaults.xsrfHeaderName).toBe('X-XSRF-TOKEN')
   })
 
   it('entrega un ApiError cuando el servidor rechaza', async () => {

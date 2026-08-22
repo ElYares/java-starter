@@ -3,19 +3,17 @@ import { defineStore } from 'pinia'
 
 import { ApiError } from '../../shared/api/ApiError'
 import { api } from '../../shared/api/client'
+import type { MeResponse } from '../../shared/api/contrato'
 
 /**
  * Lo que el frontend sabe del usuario, y su unica fuente es `GET /auth/me`.
  *
- * Espeja `MeResponse` del backend. Cuando exista el cliente generado desde
- * OpenAPI (HU-004) este tipo se borra y se importa el generado.
+ * Aqui vivia una interfaz `Perfil` escrita a mano que espejaba `MeResponse` sin
+ * nada que lo garantizara. Ya no hace falta: el tipo sale del contrato que
+ * publica el backend, asi que renombrar un campo alla rompe la compilacion aqui
+ * — que era el objetivo de HU-004 y la razon por la que existe.
  */
-export interface Perfil {
-  id: string
-  email: string
-  displayName: string
-  roles: string[]
-}
+export type Perfil = MeResponse
 
 /**
  * Los cinco estados, y son cinco porque cuatro no alcanzan.

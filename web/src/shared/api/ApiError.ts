@@ -1,5 +1,7 @@
 import axios from 'axios'
 
+import type { CodigoDelServidor } from './contrato'
+
 // Codigos que nacen en el cliente y no en el servidor.
 //
 // El catalogo de `ErrorCode` del backend solo describe lo que ocurre cuando
@@ -15,7 +17,11 @@ export const CLIENT = 'CLIENT'
 // que conteste antes de que la peticion llegue a Spring. Sin esto esas
 // respuestas llegarian a las vistas sin eje de decision, que es exactamente lo
 // que HU-002 vino a evitar.
-const CODIGO_POR_ESTADO: Record<number, string> = {
+//
+// Sigue siendo un espejo, pero ya no uno que nadie vigila: los valores estan
+// tipados contra el catalogo que publica el contrato, asi que el dia que el
+// backend retire un codigo esta tabla deja de compilar.
+const CODIGO_POR_ESTADO: Record<number, CodigoDelServidor> = {
   400: 'BAD_REQUEST',
   401: 'UNAUTHENTICATED',
   403: 'FORBIDDEN',
@@ -179,7 +185,7 @@ export class ApiError extends Error {
   }
 }
 
-function codigoPorEstado(status: number): string {
+function codigoPorEstado(status: number): CodigoDelServidor {
   return CODIGO_POR_ESTADO[status] ?? (status >= 400 && status < 500 ? 'BAD_REQUEST' : 'INTERNAL')
 }
 
