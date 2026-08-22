@@ -313,6 +313,13 @@ Lo resuelven tres piezas:
 `ApiError` no se instancia nunca. Existe solo para que el contrato pueda hablar
 de lo que ya viaja.
 
+### Quién lo consume
+
+El frontend, con `npm run api:types`, que escribe `web/src/shared/api/generated/`.
+Se generan **solo tipos**: el transporte sigue siendo la instancia de Axios de
+`shared/api/client.ts`, con su cadena de interceptores. El detalle está en
+[`05-frontend.md`](05-frontend.md).
+
 ## Reglas transversales
 
 - **DTOs siempre.** Ninguna entidad JPA sale de un controlador. Con esquemas

@@ -14,7 +14,7 @@ web/src/
     layouts/         AuthLayout.vue, AppLayout.vue
     stores/          auth.ts (Pinia)
   shared/
-    api/             client.ts, generated/ (cliente TS desde OpenAPI)
+    api/             client.ts, contrato.ts, generated/ (tipos desde OpenAPI)
     ui/              componentes tontos y reutilizables
     composables/     useAsyncResource, usePolling
   features/
@@ -75,11 +75,47 @@ de `app/`. Expone `onSessionLost(cb)` y el router lo conecta.
 `504`). Confundir no disponible con no autenticado hace que una caída de treinta
 segundos expulse a todos los usuarios de su sesión.
 
-**El cliente tipado desde OpenAPI no existe todavía**: falta `springdoc` en el
-`pom` (HU-004). Hasta entonces `shared/api` se escribe a mano. Cuando exista, se
-genera hacia `shared/api/generated/` como artefacto de build, sin editar ni
-revisar a mano: el día que el backend renombre un campo, el error aparece al
-compilar y no en producción.
+### Los tipos vienen del contrato
+
+```
+npm run api:types      # regenera shared/api/generated/ desde /api/openapi.json
+```
+
+Los tipos de `shared/api` ya no se escriben a mano: los genera
+`@hey-api/openapi-ts` a partir del contrato que publica el backend. Nada de
+`generated/` se edita — se regenera.
+
+**Solo tipos, sin SDK ni cliente.** El transporte ya existe y no es negociable:
+`client.ts` es la instancia de Axios con la cadena de interceptores de la que
+depende CU-003 entero. Un cliente generado traería su propia instancia sin nada
+de eso, y cambiaría una duplicación de tipos por una duplicación de transporte,
+que es peor.
+
+**`contrato.ts` es la única puerta a `generated/`.** Existe por dos razones: el
+esquema del backend se llama `ApiError` y en esta misma carpeta vive la clase
+`ApiError`, que es otra cosa —el cuerpo del cable contra el error normalizado que
+ven las vistas, que también existe cuando no hubo respuesta—; y porque el
+generador decide los nombres y los cambia entre versiones, así que conviene que
+eso toque un solo archivo.
+
+De ahí salen dos tipos que hacen trabajo real:
+
+- **`MeResponse`** reemplazó a la interfaz `Perfil` escrita a mano. Comprobado:
+  renombrar `displayName` en el DTO del backend, regenerar y correr `vue-tsc`
+  falla en `AppLayout.vue(28,53)` y `DashboardView.vue(12,48)` — el punto de uso,
+  con archivo y línea. Antes ese rename llegaba a producción en silencio.
+- **`CodigoDelServidor`** es el enum `ErrorCode` como unión de literales, y con
+  él está tipada la tabla `CODIGO_POR_ESTADO` de `ApiError.ts`. El día que el
+  backend retire un código, esa tabla deja de compilar.
+
+**`generated/` se versiona en git**, no se regenera en CI. Dos razones: el cambio
+de contrato aparece en el diff del PR, que es justo cuando uno quiere verlo; y el
+job de frontend sigue corriendo con solo Node, sin levantar el backend. La
+generación no puede ser un paso obligatorio de `npm run build` por lo mismo — en
+una máquina sin Docker fallaría.
+
+El precio es que nadie comprueba automáticamente que lo versionado esté al día
+con el backend. Hoy la garantía es humana: se regenera y `vue-tsc` avisa.
 
 ## Layouts
 
