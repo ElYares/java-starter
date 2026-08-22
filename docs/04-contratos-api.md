@@ -237,6 +237,54 @@ DELETE /api/users/{id}             → 204 (baja lógica: enabled=false)
   sistema debe conservar al menos un admin habilitado. Es la regla que se olvida
   y deja el sistema sin dueño.
 
+## El contrato OpenAPI
+
+```
+GET /api/openapi.json   → 200 application/json, sin sesión
+```
+
+Lo publica springdoc (`springdoc-openapi-starter-webmvc-api`). Es el artefacto
+`-api` y no el `-ui`: lo único que hace falta es el JSON, y el `-ui` arrastra
+además el webjar de Swagger UI para luego tener que apagarlo.
+
+**Las rutas del documento van sin `/api`.** El prefijo vive una sola vez, en
+`servers[0].url`, que es exactamente el `baseURL` de la instancia de Axios del
+cliente generado. Si el prefijo apareciera también en las claves de `paths`, el
+cliente pediría `/api/api/auth/login` — que no existe y responde `401`, un fallo
+que se lee como «las credenciales están mal» y no lo están.
+
+Ese `servers` se declara a mano en `OpenApiConfig`. Sin él springdoc deduce la
+URL de la petición con la que se pidió el documento, así que el mismo backend
+publica `http://localhost:8080/api` o `http://api:8080/api` según quién pregunte
+— y ninguna de las dos le sirve a un navegador que carga la SPA del mismo
+origen.
+
+**La ruta está en la lista de rutas abiertas de `SecurityConfig` a propósito.**
+Spring Security contesta antes de resolver la ruta: sin esa línea el endpoint no
+da `404` ni `200`, da `401` con el molde de error de RFC 7807 — un JSON
+perfectamente válido que el generador del cliente acepta como si fuera el
+contrato, produciendo un cliente vacío en vez de un error.
+
+**El documento es determinista.** `writer-with-default-pretty-printer` y
+`writer-with-order-by-keys` existen para que dos generaciones seguidas sin tocar
+el backend den el mismo byte. Sin ellas Jackson escribe las claves en el orden en
+que Spring descubrió los handlers, que cambia entre arranques, y entonces el
+diff deja de significar «el contrato cambió».
+
+Dos cosas se anotan a mano porque springdoc no las puede inferir:
+
+- **Los `204`.** De un `ResponseEntity<Void>` springdoc deduce un `200`, así que
+  `login`, `refresh` y `logout` llevan `@ApiResponse(responseCode = "204")`. Sin
+  eso el cliente nace creyendo que existe una respuesta con cuerpo que no existe.
+- **La cookie `rt` va oculta** con `@Parameter(hidden = true)`. Es `HttpOnly`: el
+  navegador la manda sola y ningún JavaScript puede ponerla. Publicarla como
+  parámetro le daría al cliente un argumento imposible de rellenar.
+
+**Todavía falta**: el esquema de `ProblemDetail` no aparece declarado, porque
+`code`, `traceId` y `errors[]` se ponen con `setProperty()` en tiempo de
+ejecución y springdoc no los ve. Hasta que se declare, el cliente generado no
+tipa los errores — que es la parte del contrato que más se usa.
+
 ## Reglas transversales
 
 - **DTOs siempre.** Ninguna entidad JPA sale de un controlador. Con esquemas
