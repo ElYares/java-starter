@@ -88,6 +88,12 @@ class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/auth/login", "/auth/refresh",
                                 "/auth/logout").permitAll()
                         .requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
+                        // El contrato, abierto. Spring Security contesta antes
+                        // de resolver la ruta, asi que sin esta linea
+                        // /api/openapi.json no da 404 ni 200: da 401 con el
+                        // molde de error de HU-002, y el generador del cliente
+                        // se traga ese JSON creyendo que es el contrato.
+                        .requestMatchers(HttpMethod.GET, "/openapi.json").permitAll()
                         .anyRequest().authenticated())
 
                 .exceptionHandling(handling -> handling

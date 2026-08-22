@@ -24,6 +24,14 @@
 
   <properties>
     <java.version>21</java.version>
+    <!--
+      Spring Boot no gestiona springdoc, asi que la version va a mano. La linea
+      2.x es la que corresponde: springdoc 3.x depende de 'spring-boot-webmvc' y
+      'spring-boot-web-server', artefactos que solo existen en Boot 4. Y 2.9.0
+      no es "la ultima que funciona" por casualidad — su POM padre hereda de
+      spring-boot-starter-parent 3.5.16, exactamente el parent de este proyecto.
+    -->
+    <springdoc.version>2.9.0</springdoc.version>
   </properties>
 
   <dependencies>
@@ -49,6 +57,20 @@
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+
+    <!--
+      El contrato OpenAPI que come el generador del cliente TypeScript (HU-004).
+      Es el artefacto '-api' y no el '-ui': lo unico que hace falta publicar es
+      el JSON. El '-ui' arrastra ademas el webjar de Swagger UI — unos megas de
+      assets y una pagina servida en produccion — para luego tener que apagarla
+      con 'springdoc.swagger-ui.enabled: false'. Si algun dia alguien pide la
+      UI, se cambia el artefacto y ya.
+    -->
+    <dependency>
+      <groupId>org.springdoc</groupId>
+      <artifactId>springdoc-openapi-starter-webmvc-api</artifactId>
+      <version>${springdoc.version}</version>
     </dependency>
 
     <!--

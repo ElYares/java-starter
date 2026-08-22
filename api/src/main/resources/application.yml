@@ -34,6 +34,25 @@ management:
       probes:
         enabled: true
 
+# El contrato que consume el generador del cliente TypeScript (HU-004).
+springdoc:
+  api-docs:
+    # Relativa al context-path, igual que todo lo demas: el documento sale en
+    # /api/openapi.json, no en /openapi.json.
+    path: /openapi.json
+
+  # Sin esto springdoc declara que /auth/me produce '*/*', y el cliente generado
+  # hereda ese comodin. El API solo habla JSON.
+  default-produces-media-type: application/json
+
+  # Las dos siguientes existen para que el documento sea *diffeable*. Sin ellas
+  # Jackson escribe las claves en el orden en que Spring descubrio los handlers,
+  # que cambia entre arranques: regenerar dos veces sin tocar el backend
+  # produciria un diff distinto cada vez, y entonces el diff deja de significar
+  # "el contrato cambio". Ver la decision pendiente sobre versionar 'generated/'.
+  writer-with-default-pretty-printer: true
+  writer-with-order-by-keys: true
+
 # Modelo de sesion de la Decision 003: JWT corto en cookie HttpOnly y refresh
 # opaco rotado. Las dos vidas son configuracion y no constantes porque son la
 # primera perilla que se toca al diagnosticar un problema de sesion.

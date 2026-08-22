@@ -8,6 +8,8 @@ import dev.yares.starter.identity.infra.UserRepository;
 import dev.yares.starter.platform.error.ApiException;
 import dev.yares.starter.platform.security.SessionCookies;
 import dev.yares.starter.platform.web.ClientIp;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
@@ -53,6 +55,8 @@ class AuthController {
      * del usuario. Tampoco devuelve los tokens — van en las cookies, y el
      * frontend no los toca nunca.
      */
+    @ApiResponse(responseCode = "204", description = "Sesion iniciada. Los tokens van en "
+            + "las cookies de Set-Cookie, no en el cuerpo")
     @PostMapping("/login")
     ResponseEntity<Void> login(@Valid @RequestBody LoginRequest request,
             HttpServletRequest http) {
@@ -78,8 +82,15 @@ class AuthController {
      * {@code 204} con las dos cookies rotadas y la pista reemitida, y el
      * interceptor reintenta lo que habia fallado.
      */
+    @ApiResponse(responseCode = "204", description = "Sesion renovada. Las dos cookies salen "
+            + "rotadas y la pista reemitida")
     @PostMapping("/refresh")
     ResponseEntity<Void> refresh(
+            // Oculto en el contrato, no en el codigo: la cookie es HttpOnly, asi
+            // que el navegador la manda solo y ningun JavaScript puede ponerla.
+            // Publicarla como parametro le daria al cliente generado un argumento
+            // que nadie puede rellenar y que, si alguien rellena, se ignora.
+            @Parameter(hidden = true)
             @CookieValue(name = SessionCookies.REFRESH, required = false) String refreshToken,
             HttpServletRequest http) {
 
@@ -110,8 +121,11 @@ class AuthController {
      * cierre global existe, pero como consecuencia de detectar un robo, no como
      * funcion ofrecida.
      */
+    @ApiResponse(responseCode = "204", description = "Sesion cerrada. Responde igual aunque no "
+            + "hubiera cookie que revocar")
     @PostMapping("/logout")
     ResponseEntity<Void> logout(
+            @Parameter(hidden = true)
             @CookieValue(name = SessionCookies.REFRESH, required = false) String refreshToken) {
 
         auth.logout(refreshToken);
