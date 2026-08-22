@@ -57,6 +57,13 @@ class AuthController {
      */
     @ApiResponse(responseCode = "204", description = "Sesion iniciada. Los tokens van en "
             + "las cookies de Set-Cookie, no en el cuerpo")
+    @ApiResponse(responseCode = "400", description = "code=VALIDATION_FAILED. El unico error que "
+            + "trae 'errors' campo por campo")
+    @ApiResponse(responseCode = "401", description = "code=UNAUTHENTICATED. El mismo detalle si "
+            + "el email no existe o si la contrasena esta mal: distinguirlos permite averiguar "
+            + "quien tiene cuenta")
+    @ApiResponse(responseCode = "429", description = "code=TOO_MANY_REQUESTS. Trae 'Retry-After' "
+            + "en segundos; sin esa cabecera el cliente reintenta cuando se le ocurre")
     @PostMapping("/login")
     ResponseEntity<Void> login(@Valid @RequestBody LoginRequest request,
             HttpServletRequest http) {
@@ -84,6 +91,9 @@ class AuthController {
      */
     @ApiResponse(responseCode = "204", description = "Sesion renovada. Las dos cookies salen "
             + "rotadas y la pista reemitida")
+    @ApiResponse(responseCode = "401", description = "code=UNAUTHENTICATED. Sin cookie, con una "
+            + "vencida, o con una ya reemplazada — este ultimo caso revoca la cadena entera del "
+            + "usuario, porque es la firma de un token robado")
     @PostMapping("/refresh")
     ResponseEntity<Void> refresh(
             // Oculto en el contrato, no en el codigo: la cookie es HttpOnly, asi
@@ -145,6 +155,11 @@ class AuthController {
      * es la que deja puesta la cookie {@code XSRF-TOKEN} que el login va a
      * necesitar — ver {@code CsrfCookieFilter}.
      */
+    @ApiResponse(responseCode = "200", description = "El perfil de la sesion en curso")
+    @ApiResponse(responseCode = "401", description = "code=UNAUTHENTICATED. Es la respuesta "
+            + "esperada al arrancar la SPA sin sesion, y la que siembra la cookie XSRF-TOKEN")
+    @ApiResponse(responseCode = "404", description = "code=NOT_FOUND. El token es valido pero el "
+            + "usuario ya no existe: la cuenta se borro dentro de la vida del access token")
     @GetMapping("/me")
     MeResponse me(@AuthenticationPrincipal UUID userId) {
         return users.findById(userId)
