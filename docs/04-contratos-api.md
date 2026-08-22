@@ -128,6 +128,10 @@ un `@RestControllerAdvice` que lo unifique desde el primer commit.
 y eso permite enumerar ids de otros usuarios. Solo se usa `403` cuando el
 recurso es tuyo pero la operación requiere un rol que no tienes.
 
+Este cuerpo viaja en el contrato como el esquema `ApiError`, y `code` va ahí
+como el enum completo de la tabla de arriba. Cómo se consigue —y por qué hace
+falta un espejo— está en «El contrato OpenAPI».
+
 ## Paginación
 
 Un único envoltorio para toda colección, desde el día uno. Un endpoint sin
@@ -280,10 +284,34 @@ Dos cosas se anotan a mano porque springdoc no las puede inferir:
   navegador la manda sola y ningún JavaScript puede ponerla. Publicarla como
   parámetro le daría al cliente un argumento imposible de rellenar.
 
-**Todavía falta**: el esquema de `ProblemDetail` no aparece declarado, porque
+### El error, declarado
+
+Springdoc no puede inferir el cuerpo de error de este API. Lo que ve es un
+`ProblemDetail` con tres campos y una bolsa de propiedades sin tipo, porque
 `code`, `traceId` y `errors[]` se ponen con `setProperty()` en tiempo de
-ejecución y springdoc no los ve. Hasta que se declare, el cliente generado no
-tipa los errores — que es la parte del contrato que más se usa.
+ejecución. Por su cuenta publicaría un `object` genérico, y el cliente generado
+tiparía cada respuesta feliz dejando los errores como `unknown` — justo la parte
+del contrato que más se usa.
+
+Lo resuelven tres piezas:
+
+- **`ApiError`** declara la forma del cuerpo. `code` va tipado como `ErrorCode`,
+  así que el contrato lleva el catálogo cerrado entero y un `switch` del cliente
+  sobre él se comprueba en compilación.
+- **Un `OpenApiCustomizer`** le pone ese esquema a *toda* respuesta `4xx`/`5xx`,
+  y agrega un `500` a toda operación. Se hace en un solo lugar y no anotando
+  cada endpoint porque así no se *puede* declarar una respuesta de error sin
+  cuerpo tipado: un `409` que alguien anote mañana lo recibe sin enterarse.
+- **`ApiErrorContractIT`** impide que el espejo mienta. `ApiError` describe un
+  cuerpo que construye otro código, y nada en el compilador ata una cosa a la
+  otra; la prueba provoca errores reales contra el servidor —un `401` de la
+  cadena de filtros y un `400` de Bean Validation, los dos caminos por los que
+  este API construye un error— y compara las claves que salieron por el cable
+  con las que el esquema promete. Un `setProperty()` nuevo sin su campo en
+  `ApiError` falla ahí.
+
+`ApiError` no se instancia nunca. Existe solo para que el contrato pueda hablar
+de lo que ya viaja.
 
 ## Reglas transversales
 
